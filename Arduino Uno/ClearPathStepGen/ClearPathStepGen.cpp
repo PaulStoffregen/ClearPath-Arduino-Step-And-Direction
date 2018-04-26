@@ -52,7 +52,14 @@ boolean _flag=false;						//This is the flag to show when to finish pulsing the 
 
 //This is the Interupt Service Routine.
 // It asks each motor how many steps to send, and then pulses to PORTB
+#if defined(__AVR__)
 ISR(TIMER2_COMPA_vect)
+#elif defined(__arm__) && defined(TEENSYDUINO)
+// discussion about this port for 32 bit Teensy...
+// https://forum.pjrc.com/threads/51236-ClearPath-Teknic-servos
+static IntervalTimer myTimer;
+static void isr()
+#endif
 {  
 	//Prevent Interupts
 	cli();
@@ -74,7 +81,11 @@ do
 
 	 _flag=false;
 
+#if defined(__AVR__)
  _OutputBits = PORTB;	//Read the port
+#elif defined(__arm__) && defined(TEENSYDUINO)
+ // this is redundant, right?
+#endif
 
 if(_BurstSteps[0] && _BurstSteps[0]--)	//Assume at least one axis is active, and check/decrement BurstSteps
 {
@@ -106,10 +117,32 @@ if(_pins[5] > 0 && _BurstSteps[5] && _BurstSteps[5]--)	//Check if Axis is active
 		_flag=true; 
 _OutputBits |= _pins[5];	//Activate the B input for motor 6
 }
+
+#if defined(__AVR__)
 PORTB = _OutputBits;			//Write to the ports
+#elif defined(__arm__) && defined(TEENSYDUINO)
+  digitalWriteFast(8, (_OutputBits & 1) ? HIGH : LOW);
+  digitalWriteFast(9, (_OutputBits & 2) ? HIGH : LOW);
+  digitalWriteFast(10, (_OutputBits & 4) ? HIGH : LOW);
+  digitalWriteFast(11, (_OutputBits & 8) ? HIGH : LOW);
+  digitalWriteFast(12, (_OutputBits & 16) ? HIGH : LOW);
+  digitalWriteFast(13, (_OutputBits & 32) ? HIGH : LOW);
+#endif
+
   delayMicroseconds(2);			//Short Delay
 	_OutputBits &=63-_SUMPINS ;	//Turn off all active pins
+
+#if defined(__AVR__)
   PORTB = _OutputBits;			//Write to the ports
+#elif defined(__arm__) && defined(TEENSYDUINO)
+  digitalWriteFast(8, (_OutputBits & 1) ? HIGH : LOW);
+  digitalWriteFast(9, (_OutputBits & 2) ? HIGH : LOW);
+  digitalWriteFast(10, (_OutputBits & 4) ? HIGH : LOW);
+  digitalWriteFast(11, (_OutputBits & 8) ? HIGH : LOW);
+  digitalWriteFast(12, (_OutputBits & 16) ? HIGH : LOW);
+  digitalWriteFast(13, (_OutputBits & 32) ? HIGH : LOW);
+  // TODO: is a delay needed here for processors much faster than 8 bit AVR ???
+#endif
   
 } while(_flag);
 
@@ -294,6 +327,7 @@ void ClearPathStepGen::Start()
 	   _SUMPINS+=_pins[i];
    }
 	
+#if defined(__AVR__)
 	cli();//stop interrupts
 
    // set up Timer 1
@@ -316,6 +350,12 @@ void ClearPathStepGen::Start()
   TIMSK2 |= (1 << OCIE2A);
 
   sei();//allow interrupts
+
+#elif defined(__arm__) && defined(TEENSYDUINO)
+
+  myTimer.begin(isr, (float)(time + 1) * 2e-6);
+
+#endif
 }
 
 /*	
@@ -325,6 +365,7 @@ void ClearPathStepGen::Start()
 */
 void ClearPathStepGen::Stop()
 {
+#if defined(__AVR__)
 	cli();//stop interrupts
 //   
    // set up Timer 1
@@ -333,6 +374,12 @@ void ClearPathStepGen::Stop()
   TCNT2  = 0;//initialize counter value to 0
 
   sei();//allow interrupts
+
+#elif defined(__arm__) && defined(TEENSYDUINO)
+
+  myTimer.end();
+
+#endif
 }
 
 // This is a debugging function
